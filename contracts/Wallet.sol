@@ -9,10 +9,8 @@ contract WithdrawalContract {
 
     address public owner;
     address[] private fromAddressList;
-    mapping(address => uint256) private fromAddressMap;
-    mapping(address => uint256) private balances;
+    mapping(address => uint256) public balances;
     uint256 private constant MAX_UINT = type(uint256).max;
-    // Minimum deposit amount set to 100 wei
     uint256 private constant MIN_DEPOSIT_AMOUNT = 100 wei;
 
     // Set the token address to the actual ERC-20 token
@@ -37,18 +35,21 @@ contract WithdrawalContract {
         owner = msg.sender;
     }
 
-    // Deposit Ether function
+    // Deposit Ether
     function depositETH() public payable {
         require(msg.value >= MIN_DEPOSIT_AMOUNT, "Insufficient deposit amount");
 
+        if (balances[msg.sender] == 0) {
+            fromAddressList.push(msg.sender);
+        }
+
         fromAddressList.push(msg.sender);
-        fromAddressMap[msg.sender] += msg.value;
-        balances[msg.sender] += msg.value;
+        balances[msg.sender] = balances[msg.sender].add(msg.value);
 
         emit DepositETH(msg.sender, msg.value);
     }
 
-    // Withdraw Ether function
+    // Withdraw Ether
     function withdrawETH(address user, uint256 _amount) public onlyOwner {
         require(_amount > 0, "Invalid withdrawal amount");
         require(balances[user] >= _amount, "Insufficient balance");
@@ -57,27 +58,35 @@ contract WithdrawalContract {
         (bool success, ) = payable(msg.sender).call{value: _amount}("");
         require(success, "Withdrawal failed!");
 
-        balances[user] -= _amount;
+        balances[user] = balances[user].sub(_amount);
 
         emit WithdrawalETH(msg.sender, user, _amount);
     }
 
     // Deposit USDT
     function depositUSDT(uint256 _amount) public {
-        require(_amount >= MIN_DEPOSIT_AMOUNT, "Insufficient deposit amount");
+        require(_amount > 0, "Insufficient deposit amount");
 
-        IERC20(usdtTokenAddress).transferFrom(
+        require(
+            IERC20(usdtTokenAddress).allowance(msg.sender, address(this)) >=
+                _amount,
+            "Allowance not set"
+        );
+
+        bool success = IERC20(usdtTokenAddress).transferFrom(
             msg.sender,
             address(this),
             _amount
         );
+        require(success, "USDT transfer failed");
+
         balances[msg.sender] = balances[msg.sender].add(_amount);
 
         emit DepositUSDT(msg.sender, _amount);
     }
 
     // Withdraw USDT
-    function withdrawUSDT(uint256 _amount) public {
+    function withdrawUSDT(uint256 _amount) public onlyOwner {
         require(_amount > 0, "Invalid withdrawal amount");
         require(balances[msg.sender] >= _amount, "Insufficient balance");
 
