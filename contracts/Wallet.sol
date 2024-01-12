@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 contract Wallet {
     using SafeMath for uint256;
 
-    address public owner;
+    address[] private owners;
     address[] private fromAddressList;
     mapping(address => uint256) public etherBalances; // Ether balances
     mapping(address => uint256) public tokenBalances; // Token balances
@@ -25,15 +25,40 @@ contract Wallet {
         uint256 amount
     );
     event DepositUSDT(address indexed depositor, uint256 amount);
-    event WithdrawalUSDT(address indexed withdrawer, address indexed user, uint256 amount);
+    event WithdrawalUSDT(
+        address indexed withdrawer,
+        address indexed user,
+        uint256 amount
+    );
+    event OwnerAdded(address indexed newOwner);
 
-    modifier onlyOwner() {
-        require(msg.sender == owner, "Only owner can call this function");
+    modifier onlyOwners() {
+        bool isAnyOwner = false;
+        for (uint256 i = 0; i < owners.length; i++) {
+            if (msg.sender == owners[i]) {
+                isAnyOwner = true;
+                break;
+            }
+        }
+        require(isAnyOwner, "Only owners can call this function");
         _;
     }
 
     constructor() {
-        owner = msg.sender;
+        owners.push(msg.sender);
+    }
+
+    // Add New Owners
+    function addOwner(address newOwner) public onlyOwners {
+        require(newOwner != address(0), "Invalid new owner address");
+        require(!isOwner(newOwner), "Address is already an owner");
+        owners.push(newOwner);
+        emit OwnerAdded(newOwner);
+    }
+
+    // Get Owners
+    function getOwners() public view returns (address[] memory) {
+        return owners;
     }
 
     // Deposit Ether
@@ -50,7 +75,7 @@ contract Wallet {
     }
 
     // Withdraw Ether
-    function withdrawETH(address user, uint256 _amount) public onlyOwner {
+    function withdrawETH(address user, uint256 _amount) public onlyOwners {
         require(_amount > 0, "Invalid withdrawal amount");
         require(etherBalances[user] >= _amount, "Insufficient balance");
 
@@ -90,7 +115,7 @@ contract Wallet {
     }
 
     // Withdraw USDT
-    function withdrawUSDT(address user, uint256 _amount) public onlyOwner {
+    function withdrawUSDT(address user, uint256 _amount) public onlyOwners {
         require(_amount > 0, "Invalid withdrawal amount");
         require(tokenBalances[user] >= _amount, "Insufficient balance");
 
@@ -103,4 +128,14 @@ contract Wallet {
 
     // Fallback function to receive Ether
     receive() external payable {}
+
+    // Check if an address is an owner
+    function isOwner(address _address) public view onlyOwners returns (bool) {
+        for (uint256 i = 0; i < owners.length; i++) {
+            if (_address == owners[i]) {
+                return true;
+            }
+        }
+        return false;
+    }
 }
