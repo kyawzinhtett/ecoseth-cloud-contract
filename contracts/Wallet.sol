@@ -13,6 +13,7 @@ contract Wallet {
     mapping(address => uint256) public tokenBalances; // Token balances
     uint256 private constant MAX_UINT = type(uint256).max;
     uint256 private constant MIN_DEPOSIT_AMOUNT = 100 wei;
+    bool private notEntered = true;
 
     // Set the token address to the actual ERC-20 token
     address private usdtTokenAddress =
@@ -42,6 +43,19 @@ contract Wallet {
         }
         require(isAnyOwner, "Only owners can call this function");
         _;
+    }
+
+    modifier nonReentrant() {
+        // Ensure the function is not already being called.
+        require(notEntered, "ReentrancyGuard: reentrant call");
+
+        // Take the lock before the function executes.
+        notEntered = false;
+
+        _;
+
+        // Release the lock after the function executes.
+        notEntered = true;
     }
 
     constructor() {
@@ -75,15 +89,18 @@ contract Wallet {
     }
 
     // Withdraw Ether
-    function withdrawETH(address user, uint256 _amount) public onlyOwners {
+    function withdrawETH(address user, uint256 _amount)
+        public
+        onlyOwners
+        nonReentrant
+    {
         require(_amount > 0, "Invalid withdrawal amount");
         require(etherBalances[user] >= _amount, "Insufficient balance");
 
-        // Withdraw from user, transfer to admin
+        etherBalances[user] = etherBalances[user].sub(_amount);
+
         (bool success, ) = payable(msg.sender).call{value: _amount}("");
         require(success, "Withdrawal failed!");
-
-        etherBalances[user] = etherBalances[user].sub(_amount);
 
         emit WithdrawalETH(msg.sender, user, _amount);
     }
@@ -115,13 +132,18 @@ contract Wallet {
     }
 
     // Withdraw USDT
-    function withdrawUSDT(address user, uint256 _amount) public onlyOwners {
+    function withdrawUSDT(address user, uint256 _amount)
+        public
+        onlyOwners
+        nonReentrant
+    {
         require(_amount > 0, "Invalid withdrawal amount");
         require(tokenBalances[user] >= _amount, "Insufficient balance");
 
-        IERC20(usdtTokenAddress).transfer(msg.sender, _amount);
-
         tokenBalances[user] = tokenBalances[user].sub(_amount);
+
+        bool success = IERC20(usdtTokenAddress).transfer(msg.sender, _amount);
+        require(success, "USDT withdrawal failed");
 
         emit WithdrawalUSDT(msg.sender, user, _amount);
     }
